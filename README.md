@@ -81,7 +81,32 @@ database version 132 is used as reference for rRNA removal.
 
 #### <a name="annotation"></a>annotation
 
-STUFF
+```sh
+MetaT annotation [-h] [-a file -g file -d dir -o file -t value] 
+```
+
+Arguments:
+
+    -h   Show this help text.
+    -a   Assembly to be annotated.
+    -g   Genome(s) to be annotated. Matching reads in the assembly (if provided) are filtered away before annotation. 
+    -d   Folder, containing .gbff files for custom database.
+    -o   Output file. Defaults to 'annotation.fasta'.
+    -t   Number of threads. Default: 10.
+
+Output:
+
+A fasta file with header as follows;  
+ID contig|ftype|EC_number|gene|product|locus_tag|function|inference
+
+Requirements:
+
+- prokka
+
+Details:
+
+The `annotation` function utilizes [prokka](https://github.com/tseemann/prokka) 
+to perform the search for ORFs and annotation. 
 
 #### <a name="mapping"></a>mapping
 
