@@ -83,12 +83,12 @@ database version 132 is used as reference for rRNA removal.
 
 Arguments:
 
-    -h   Show this help text.
-    -a   Assembly to be annotated.
-    -g   Genome(s) to be annotated. Matching reads in the assembly (if provided) are filtered away before annotation. 
-    -d   Folder, containing .gbff files for custom database.
-    -o   Output file. Defaults to 'annotation.fasta'.
-    -t   Number of threads. Default: 10.
+    -h  Show this help text.
+    -a  Assembly to be annotated.
+    -g  Genome(s) to be annotated. Matching reads in the assembly (if provided) are filtered away before annotation. 
+    -d  Folder, containing .gbff files for custom database.
+    -o  Output file. Defaults to 'annotation.fasta'.
+    -t  Number of threads. Default: 10.
 
 Output:
 
@@ -106,7 +106,32 @@ to perform the search for ORFs and annotation.
 
 #### <a name="mapping"></a>mapping
 
-STUFF
+**MetaT mapping [-h] [-i dir -a file -o file -x value -t value]**
+
+Arguments:
+
+    -h  Show this help text.
+    -i  Input folder, containing .fasta files for mapping. must be in cd or subfolders. 
+    -a  Annotation .fasta file as outputted from 'annotation' function in MetaT.
+    -o  Output file. Defaults to 'counts.txt' in cd.
+    -x  Identity threshold for mapping (default: 0.95).
+    -t  Number of threads (default: 10).
+
+Output:
+
+The output is a tab-separated file. Columns are samples and rows are genes. First column is the unique gene ID. Second column is metadata, each metadata is separated by '|'.
+
+Requirements:
+
+- minimap2
+- R 
+- data.table (An R-package)
+
+Details:
+
+The `mapping` function utilizes [minimap2](https://github.com/lh3/minimap2) for 
+mapping reads to reference and the R-package [data.table](https://github.com/Rdatatable/data.table/wiki)
+to reshape the data.
 
 ### <a name="help"></a>Getting help
 
