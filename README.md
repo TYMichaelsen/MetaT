@@ -44,9 +44,7 @@ git clone https://github.com/TYMichaelsen/MetaT
 
 Prepare RNA reads for mapping, by performing adapter trimming, Q-score filtering, and rRNA removal of 50bp SR. 
 
-```sh
-MetaT readprep [-h] [-d dir -i file -o dir -q value -t value]
-```
+**MetaT readprep [-h] [-d dir -i file -o dir -q value -t value]**
 
 Arguments:
 
@@ -81,9 +79,7 @@ database version 132 is used as reference for rRNA removal.
 
 #### <a name="annotation"></a>annotation
 
-```sh
-MetaT annotation [-h] [-a file -g file -d dir -o file -t value] 
-```
+**MetaT annotation [-h] [-a file -g file -d dir -o file -t value]**
 
 Arguments:
 
