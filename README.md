@@ -46,6 +46,7 @@ Prepare RNA reads for mapping, by performing adapter trimming, Q-score filtering
 
 ```sh
 MetaT readprep [-h] [-d dir -i file -o dir -q value -t value]
+```
 
 Arguments:
     -h  Show this help text.
@@ -65,9 +66,8 @@ The -i option relies on the typical naming convention of demultiplexed Illumina 
 
 Requirements:
 - BBMap
-```
 
-**Details**
+Details:
 
 The `readprep` function utilizes [BBmap](https://jgi.doe.gov/data-and-tools/bbtools/bb-tools-user-guide/bbmap-guide/) 
 tools to perform the actual adapter trimming, Q-score filtering and rRNA removal. 
