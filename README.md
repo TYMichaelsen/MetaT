@@ -44,13 +44,36 @@ git clone https://github.com/TYMichaelsen/MetaT
 
 Prepare RNA reads for mapping, by performing adapter trimming, Q-score filtering, and rRNA removal of 50bp SR. 
 
-	MetaT readprep [-h] [-d *dir* -i *file* -o *dir* -q *value* -t *value*]
+```sh
+MetaT readprep [-h] [-d dir -i file -o dir -q value -t value]
 
-**Arguments**
+Arguments:
+    -h  Show this help text.
+    -d  Directory to search for raw Illumina SR sequencing data.
+    -i  List of prefixes for files to search for.
+    -o  Output directory to put QC'ed reads. Defaults to 'RNAreads' in cd.
+    -q  Q-score threshold. Default: 20.
+    -t  Number of threads. Defaults: 10.
 
-**Value**
+Output:
+ 1) .fasta files of curated reads in -o directory.
+ 2) A file 'seqstat.txt' containing count statistics of reads during each step. Dumped in cd.
+ 3) A file 'rRNAreads.fa' containing all rRNA reads found. Dumped in cd.
+
+Note: 
+The -i option relies on the typical naming convention of demultiplexed Illumina output files, meaning that the prefix is consistent and unique for all files (read no., lane) for a particular sample. Make sure this is the case. The code will concatenate all files with same prefix before downstream processing.
+
+Requirements:
+- BBMap
+```
 
 **Details**
+
+The `readprep` function utilizes [BBmap](https://jgi.doe.gov/data-and-tools/bbtools/bb-tools-user-guide/bbmap-guide/) 
+tools to perform the actual adapter trimming, Q-score filtering and rRNA removal. 
+The `BBMap` tool has build-in adapters which covers basically all NGS adapters. 
+The SILVA [Life Tree Project](https://www.arb-silva.de/projects/living-tree) (LTP) 
+database version 132 is used as reference for rRNA removal.
 
 #### <a name="annotation"></a>annotation
 
