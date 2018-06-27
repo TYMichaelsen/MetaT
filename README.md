@@ -15,16 +15,18 @@
 MetaT is a wrapper tool for fast and simple preprocessing of NGS transcriptomics 
 data, combining the most recent and fastest software currently available in a 
 user-friendly format. The general workflow of the MetaT wrapper tool is:
+
 ```sh
 # QC of reads.
-MetaT readprep -i samples -t 40
+MetaT readprep -i samples -t 10
 
 # Annotate assembly.
-MetaT annotation -a assembly.fasta -o annotation.fasta -t
+MetaT annotation -a assembly.fasta -o annotation.fasta -t 10
 
 # Map reads to annotated assembly.
-MetaT mapping -i RNAreads -a anotation.fasta -o counts.txt -t 40
+MetaT mapping -i RNAreads -a anotation.fasta -o counts.txt -t 10
 ```
+
 **Importantly**, the pipeline is only setup to handle transcriptomics data from
 a 50bp SR illumina library. Furhtermore, the annotation database are only setup 
 for Bacteria at the moment.
@@ -40,7 +42,15 @@ git clone https://github.com/TYMichaelsen/MetaT
 
 #### <a name="readprep"></a>readprep
 
-STUFF
+Prepare RNA reads for mapping, by performing adapter trimming, Q-score filtering, and rRNA removal of 50bp SR. 
+
+	MetaT readprep [-h] [-d *dir* -i *file* -o *dir* -q *value* -t *value*]
+
+**Arguments**
+
+**Value**
+
+**Details**
 
 #### <a name="annotation"></a>annotation
 
