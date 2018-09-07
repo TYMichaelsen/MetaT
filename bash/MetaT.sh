@@ -47,6 +47,5 @@ SCRIPT_PATH=${BASH_SOURCE[0]}
 export MetaT_DIR=${SCRIPT_PATH%/*}
 
 ### Call tool ------------------------------------------------------------------
-
-$MetaT_DIR/MetaT_tools/MetaT_$TOOL $TOOL_ARG
+$MetaT_DIR/MetaT_$TOOL $TOOL_ARG
 

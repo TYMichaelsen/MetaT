@@ -17,13 +17,13 @@ data, combining the most recent and fastest software currently available in a
 user-friendly format. The general workflow of the MetaT wrapper tool is:
 ```sh
 # QC of reads.
-MetaT readprep -i samples -t 40
+MetaT readprep -i samples -t 10
 
 # Annotate assembly.
-MetaT annotation -a assembly.fasta -o annotation.fasta -t
+MetaT annotation -a assembly.fasta -o annotation.fasta -t 10
 
 # Map reads to annotated assembly.
-MetaT mapping -i RNAreads -a anotation.fasta -o counts.txt -t 40
+MetaT mapping -i RNAreads -a anotation.fasta -o counts.txt -t 10
 ```
 **Importantly**, the pipeline is only setup to handle transcriptomics data from
 a 50bp SR illumina library. Furhtermore, the annotation database are only setup 

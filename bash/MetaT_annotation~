@@ -63,6 +63,7 @@ if [ ! -z ${ANT_DIR}+x} ]; then
   fi
 fi
 
+
 if [ -z ${OUT+x} ]; then OUT=annotation.fasta; fi;
 if [ -z ${THREAD+x} ]; then THREAD=10; fi;
 

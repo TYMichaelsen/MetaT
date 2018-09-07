@@ -4,6 +4,7 @@
 VERSION=0.1.0
 
 ### Check program availability -------------------------------------------------
+
 ### Description ----------------------------------------------------------------
 USAGE="$(basename "$0") [-h] [ name ... ] 
 -- MetaT toolbox v. $VERSION: Misc. tools for (meta)transcriptomics workflows. 
