@@ -1,0 +1,217 @@
+#!/bin/bash
+# MetaT annotation
+# By Thomas Yssing Michaelsen
+VERSION=0.1.2
+
+### Description ----------------------------------------------------------------
+
+USAGE="$(basename "$0") [-h] [-a file -d dir -o file -t value] 
+-- MetaT annotation v. $VERSION: A wrapper for annotation software, that ensures file format is compatible with other MetaT tools. Outputs a .fasta file containing all predicted ORF with annotation. 
+
+Arguments:
+    -h   Show this help text.
+    -a   Assembly to be annotated.
+    -d   Folder, containing .fasta and .gbff files for custom database and genomes, respectively.
+    -o   Output file. Defaults to 'annotation.fasta'.
+    -k   Kingdom. Default: Bacteria (NOT IMPLEMENTED YET!)
+    -t   Number of threads. Default: 10.
+
+Output:
+A fasta file with header as follows;  
+>[ID] genome|contig|gene_start|strand|inference|contig_length|ftype|gene_length|gene|EC_number|COG|product|locus_tag|function
+
+Note: 
+* If both assembly and genome(s) are provided, matching reads are filtered away from assembly before annotation.
+* .fasta files provided in -d must not contain '_' in file names, as this is used as internal separator.
+
+Requirements:
+- prokka
+- bbmap
+"
+
+### Terminal Arguments ---------------------------------------------------------
+
+# Import user arguments
+while getopts ':hz:a:d:o:t:' OPTION; do
+  case $OPTION in
+    h) echo "$USAGE"; exit 1;;
+    a) ASSEM=$OPTARG;;
+    d) ANT_DIR=$OPTARG;;
+    o) OUT=$OPTARG;;
+    t) THREAD=$OPTARG;;
+    :) printf "missing argument for -$OPTARG\n" >&2; exit 1;;
+    \?) printf "invalid option for -$OPTARG\n" >&2; exit 1;;
+  esac
+done
+
+# Check missing arguments
+if [[ -z $ASSEM && -z $ANT_DIR ]]; then
+  printf "\n None of mandatory data input (-a or -d) are set.\n\n"
+  echo "$USAGE"
+  exit 1
+fi
+if [ ! -e $ASSEM ]; then 
+  printf "\n -a is not pointing to a valid .fasta file.\n\n"
+  echo "$USAGE"
+  exit 1
+fi
+if [ ! -z ${ANT_DIR}+x} ]; then
+  if [ ! -e $ANT_DIR ]; then 
+    printf "\n -d is not pointing to a valid folder.\n\n"
+    echo "$USAGE"
+    exit 1
+  fi
+fi
+
+if [ -z ${OUT+x} ]; then OUT=annotation.fasta; fi;
+if [ -z ${THREAD+x} ]; then THREAD=10; fi;
+
+### Dependencies.--------------------------------------------------------------
+gbk2faa=$MetaT_DIR/../dependencies/prokka-genbank_to_fasta_db.pl # Amino acid conversion
+gbk2fa=$MetaT_DIR/../dependencies/prokka-genbank_to_fasta_nucleotide_db.pl # Nucleic acid conversion
+bbmap=/space/users/tym/Documents/bbmap
+
+### Code.----------------------------------------------------------------------
+if [ ! -z $ANT_DIR ]; then
+  GBFF_FILES=`find $ANT_DIR -name "*.gbff" -type f` 
+  FA_FILES=`find $ANT_DIR -name "*.fa*" -type f`
+fi
+ 
+### If genomes(s) provided, remove matching reads from assembly #####################
+if [ ! -z "$FA_FILES" ]; then
+ 
+  # Merge genomes. 
+  rm -rf gnomes.fasta
+  for i in $FA_FILES 
+  do
+    ii=${i%.*}
+    iii=${ii##*/}
+    
+    # Check correct naming. 
+    if [[ $iii = *"assembly"* || $iii = *"_"* ]]; then
+      echo "ERROR: genome(s) must not have 'assembly' or '_' in the file name. Please rename: $iii."
+      exit 1
+    fi 
+
+    # Append the file name to the contig name.
+    awk -v SAMP=$iii '/^>/{print ">"SAMP"_"substr($1,2); next}{print}' $i >> gnomes.fasta
+  done
+  if [ ! -z "$ASSEM" ]; then
+    echo "Removing contigs from assembly matching the genome(s)..."
+  
+    # List the matching contigs from the assembly.
+    minimap2 -x asm5 $ASSEM gnomes.fasta  2>/dev/null | awk '{A[$6]++} END {for(i in A) print i}' > contig_rm
+  
+    # Remove the matching contigs from the assembly.
+    $bbmap/filterbyname.sh in=$ASSEM \
+      out=sub.fasta \
+      names=contig_rm \
+      substring=f \
+      ow=t
+
+    echo "Removed $(wc -l < contig_rm) contigs from assembly"
+
+    # Add "assembly" to the fasta header. 
+    awk -v SAMP="assembly" '/^>/{print ">"SAMP"_"substr($1,2); next}{print}' sub.fasta > sub2.fasta
+    rm sub.fasta
+
+    cat gnomes.fasta sub2.fasta > asstmp.fasta
+    ASSEMBLY="asstmp.fasta"
+    rm sub2.fasta contig_rm
+  else
+    ASSEMBLY="gnomes.fasta"
+  fi
+elif [ ! -z "$ASSEM" ]; then
+  awk -v SAMP="assembly" '/^>/{print ">"SAMP"_"substr($1,2); next}{print}' $ASSEM > asstmp.fasta
+  ASSEMBLY="asstmp.fasta"
+fi
+
+### Custom annotation. ########################################################
+if [ ! -z "$GBFF_FILES" ]; then
+  echo "Preparing the custom database..."
+
+  if [ -z "$FA_FILES" ] && [ -z "$ASSEM" ]; then
+  # CASE 1: No assembly/genome(s) - make annotation directly from db.fa file.
+  
+    # Format as nucleotide fasta-file.
+    $gbk2fa $GBFF_FILES --sep=';' --pseudo 1 --hypo 1 &>/dev/null > db.fa
+    
+    # Rename sequences.
+    sed 's/;/|/g; s/\s/\t|||/' db.fa | awk 'BEGIN {FS="\t"} /^>/{print ">PROKKA_" ++i"\t"$2; next}{print}' > $OUT 
+    rm db.fa 
+    echo "Done!" 
+    exit 1
+  else 
+  # CASE 2: assembly and/or genome(s) pressent. ###
+
+    # Format custom db as amino acid fasta-file (for PROKKA).
+    $gbk2faa $GBFF_FILES --pseudo 1 --hypo 1 &>/dev/null > db.faa
+    CUST_DB="--proteins db.faa"
+  fi
+else
+  CUST_DB=""
+fi
+
+if [ ! -z "$ASSEMBLY" ]; then
+  if [[ ! -z "$FA_FILES" && ! -z "$ASSEM" ]]; then
+    echo "Annotating the combined assembly and genome(s)..."
+  elif [[ -z "$FA_FILES" && ! -z "$ASSEM" ]]; then
+    echo "Annotating the assembly..."
+  elif [[ ! -z "$FA_FILES" && -z "$ASSEM" ]]; then
+    echo "Annotating the genome(s)..."
+  fi
+ 
+  # Before running prokka, disable the "tbl2asn" (TAKES FOREVER TO RUN!!)
+  export PATH=$MetaT_DIR/dependencies:$PATH
+ 
+  # Run prokka.
+  rm -rf tmp
+  prokka $ASSEMBLY \
+  --outdir tmp \
+  --prefix OUT \
+  --locustag PROKKA \
+  --cpus $THREAD \
+  --Kingdom Bacteria --metagenome \
+  $CUST_DB \
+  --force --quiet >/dev/null 2>/dev/null
+  rm -rf db.faa asstmp.fasta gnomes.fasta
+
+  # Generate file with contig, position, strand, and inference.
+  sed -n '/##FASTA/q;p' tmp/*.gff | grep -E "^##seq|ID=" | sed '/^##seq/s/\s/\t/g' | awk '
+  BEGIN {FS="\t"} {
+    if ($1 == "##sequence-region")
+      A[$2]=$4;
+    else
+      $10=$9; 
+      sub(/\.*ID=/,"",$9); sub(/;.*$/,"",$9); 
+      sub(/^.*inference=/,"",$10); sub(/;.*$/,"",$10);
+      B[$1][$9]=$9"\t"$1"|"$4"|"$7"|"$10};
+  END {
+    for (i in B){
+      for (j in B[i]) print B[i][j]"|"A[i]
+  }}' | grep -vP '^\t' > file1
+
+  # Fetch annotation.
+  sort tmp/*.tsv | sed 's/\t/|/g' | sed 's/|/\t/' | grep -vP '^\t' > file2
+
+  # Combine position and annotation.
+  join <(sort -k 1b,1 file1) <(sort -k 1b,1 file2) -t $'\t' | # Join contig no. and annotation files. 
+  awk ' BEGIN {OFS="\t";FS="\t"} {sub(/_/,"|",$2); print $1,$2"|"$3 } ' | # Reformat to nice printing.
+  awk '{A=$0; B=gensub(/ /,"|","g",sprintf("%*s",13-gsub(/\|/,""),"")); print ">"A""B}' > comb.tbl # Add extra "|" if missing.
+  rm -rf file1 file2
+
+  # Add annotation to the sequences.
+  awk '/^>/{print $1; next}{print}' tmp/*.ffn > seq.fa
+  awk '
+    FILENAME == ARGV[1] { A[$1] = FNR; B[FNR] = $0; next }
+    FILENAME == ARGV[2] {
+            if ($0 in A) {
+                $0 = B[A[$0]]
+            }
+        print
+    }
+  ' comb.tbl seq.fa > $OUT   
+  rm -rf comb.tbl seq.fa tmp
+fi 
+echo "Done!"
+exit 1

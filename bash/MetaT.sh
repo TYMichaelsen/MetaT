@@ -1,0 +1,52 @@
+#!/bin/bash
+# Transcriptomic workflow
+# By Thomas Yssing Michaelsen
+VERSION=0.1.0
+
+### Check program availability -------------------------------------------------
+
+### Description ----------------------------------------------------------------
+USAGE="$(basename "$0") [-h] [ name ... ] 
+-- MetaT toolbox v. $VERSION: Misc. tools for (meta)transcriptomics workflows. 
+
+where:
+    -h   Show this help text.
+    name Name of tool.
+    ...  Commands for tool.
+
+Available tools:
+* readprep: Prepare 50 bp SR RNA reads for mapping. For more info type: \`MetaT readprep -h\`
+* annotation: Annotate .gbff files, assemblies and genomes. For more info type: \`MetaT annotation -h\`
+* mapping: Map reads to reference annotation. For more info type: \`MetaT readprep -h\`
+"
+
+### Terminal Arguments ---------------------------------------------------------
+
+# Import user arguments
+while getopts ':hz' OPTION; do
+  case $OPTION in
+    h) echo "$USAGE"; exit 1;;
+    :) printf "missing argument for -$OPTARG\n" >&2; exit 1;;
+    \?) printf "invalid option for -$OPTARG\n" >&2; exit 1;;
+  esac
+done
+TOOL=$1
+TOOL_ARG="${*:2}"
+
+# Check missing arguments
+if [ -z "${TOOL}" ]; then printf "\n No tool selected!\n\n"; echo "$USAGE"; exit 1; fi; 
+if [ -z "${TOOL_ARG}" ]; then
+  printf "\n No arguments provided to $TOOL!\n\n"
+  TOOL_ARG="-h"
+  echo "$USAGE"
+  exit 1
+fi
+
+# Paths
+SCRIPT_PATH=${BASH_SOURCE[0]}
+export MetaT_DIR=${SCRIPT_PATH%/*}
+
+### Call tool ------------------------------------------------------------------
+
+$MetaT_DIR/MetaT_tools/MetaT_$TOOL $TOOL_ARG
+

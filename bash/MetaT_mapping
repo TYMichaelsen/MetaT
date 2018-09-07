@@ -1,0 +1,81 @@
+#!/bin/bash
+# MetaT mapping
+# By Thomas Yssing Michaelsen
+VERSION=0.1.0
+
+USAGE="$(basename "$0") [-h] [-i dir -a file -o file -x value -t value] 
+-- MetaT mapping v. $VERSION: Mapping Illumina reads to reference using minimap2.
+
+Arguments:
+    -h  Show this help text.
+    -i  Input folder, containing .fasta files for mapping. 
+    -a	Annotation .fasta file as outputted from 'annotation' function in MetaT.
+    -o  Output file. Defaults to 'counts.txt' in cd.
+    -x  Identity threshold for mapping (default: 0.95).
+    -t  Number of threads (default: 10).
+
+Output:
+The output is a tab-separated file. Columns are samples and rows are genes. First column is the unique gene ID. Second column is metadata, each metadata is separated by '|'.
+
+Requirements:
+- minimap2
+- R 
+- data.table (An R-package)
+
+Note: 
+-i and -a can be in other folders, just specify their path relative to the current directory.
+"
+
+### Terminal arguments.--------------------------------------------------------
+# Import user arguments
+while getopts ':hz:i:a:o:x:t:' OPTION; do
+  case $OPTION in
+    h) echo "$USAGE"; exit 1;;
+    i) INDIR=$OPTARG;;
+    a) ANNOT=$OPTARG;;
+    o) OUT=$OPTARG;;
+    x) ID=$OPTARG;;
+    t) THREAD=$OPTARG;;
+    :) printf "missing argument for -$OPTARG\n" >&2; exit 1;;
+    \?) printf "invalid option for -$OPTARG\n" >&2; exit 1;;
+  esac
+done
+
+# Check missing arguments.
+MISSING="is missing but required. Exiting."
+if [ -z ${OUT+x} ]; then OUT=counts.txt; fi;
+if [ -z ${INDIR+x} ]; then echo "-i $MISSING"; echo "$USAGE"; exit 1; fi;
+if [ -z ${ID+x} ]; then ID=0.95; fi;
+if [ -z ${ANNOT+x} ]; then echo "-a $MISSING"; echo "$USAGE"; exit 1; fi;
+if [ -z ${THREAD+x} ]; then THREAD=10; fi;
+wh=(`find $INDIR -name '*.fa*' -type f`)
+if [ ! ${#wh} -gt 0 ]; then
+  printf "\n -i does not contain valid .fasta files.\n\n"
+  echo "$USAGE"
+  exit 1
+fi
+if [ ! -e $ANNOT ]; then
+  printf "\n -a is not pointing to a valid .fasta file.\n\n"
+  echo "$USAGE"
+  exit 1
+fi
+
+### Code ----------------------------------------------------------------------
+# Map and count unique sample/ID occurences.
+echo "(mini)mapping..."
+rm -rf tmp.tbl
+minimap2 -cx sr -t $THREAD $ANNOT <(cat $INDIR/*.fa*) 2>/dev/null | \
+awk -v seqID=$ID '{ $2=$10/$11 } $2 >= seqID {sub(/\..*$/,"",$1); A[$1"\t"$6]++} END {for(i in A)print i"\t"A[i]}' > tmp.tbl
+
+# Spread the counts into wide format.
+echo "Building table..."
+R -e 'library(data.table);dat <- data.table::fread("tmp.tbl",col.names = c("sample","ID","count"));dat <- dcast(dat, ID ~ sample,value.var = "count",fill = 0);fwrite(dat,"tmp.tbl",sep = "\t")' >/dev/null
+
+# Combine table with annotation.
+echo "Create output..."
+head -1 tmp.tbl | sed 's/ID/ID\tMetadata/' > $OUT
+join <(grep "^>" $ANNOT | sed 's/>//' | sort -k 1b,1) <(sort -k 1b,1 tmp.tbl) -t $'\t' --nocheck-order >> $OUT
+rm tmp.tbl
+
+echo "Done!"
+

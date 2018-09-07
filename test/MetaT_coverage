@@ -1,0 +1,94 @@
+#!/bin/bash
+# mt coverage
+# By Thomas Yssing Michaelsen
+VERSION=beta
+
+# This is a script that asses meta-transcriptome coverage of an assembly.
+
+### Description ----------------------------------------------------------------
+
+USAGE="$(basename "$0") [-h] [-i dir -a file -o file -t value] 
+-- mt coverage v. $VERSION: [FUNCTION NOT IMPLEMENTED].
+
+where:
+    -h  Show this help text.
+    -i  Input directory, containing .fa files for coverage estimation.
+    -a  Assembly to map against.
+    -o  Output file. Defaults to 'mtcov.tbl' in cd.
+    -t  Number of threads. Defaults to 40.
+
+Requirements:
+- minimap2 v 2.8
+- samtools v 1.3.1
+"
+### Terminal Arguments ---------------------------------------------------------
+
+# Import user arguments
+while getopts ':hz:i:a:o:t:' OPTION; do
+  case $OPTION in
+    h) echo "$USAGE"; exit 1;;
+    i) INDIR=$OPTARG;;
+    a) ASSEM=$OPTARG;;
+    o) OUT=$OPTARG;;
+    t) threads=$OPTARG;;
+    :) printf "missing argument for -$OPTARG\n" >&2; exit 1;;
+    \?) printf "invalid option for -$OPTARG\n" >&2; exit 1;;
+  esac
+done
+
+# Check missing arguments
+wh=(`find $INDIR/*.fa -type f`)
+if [ ! ${#wh} -gt 0 ]; then
+  printf "\n -i does not contain valid files.\n\n"
+  echo "$USAGE"
+  exit 1
+fi
+if [ ! -e $ASSEM ]; then
+  printf "\n -a is not pointing to a valid file.\n\n"
+  echo "$USAGE"
+  exit 1
+fi
+if [ -z ${OUT+x} ]; then OUT=mtcov.tbl; fi;
+if [ -z ${threads+x} ]; then threads=40; fi;
+
+### Code.----------------------------------------------------------------------
+
+# Store the contig sequence lengths. 
+awk 'BEGIN {OFS=","} !/^>/ { next } { getline seq; gsub(">", "", $0) } { print $0, length(seq) }' $ASSEM > contig_len
+
+echo "id,scaffold,coverage,stdev,active" > $OUT
+
+while read sample; do 
+  echo "Processing ${sample##*/}..."
+  
+  # Create BAM file.
+  minimap2 -t $threads -ax sr $ASSEM $sample 2>/dev/null |
+  samtools view -@ $threads -q 10 -b -F 0x904 - |
+  samtools sort -@ $threads - > cov_tmp.bam
+
+  # get raw coverage.
+  samtools depth cov_tmp.bam > tmp1 
+
+  # Calculate mean and stdev.
+  awk -F "\t" '
+    BEGIN{OFS = ","}
+    { a[$1] += $3; b[$1]++; c[$1]+=$3*$3 }
+    END{OFS = ","; for (i in a) print i, a[i]/b[i], sqrt(c[i]/b[i] - (a[i]/b[i])^2)} ' tmp1 > tbl1
+
+  # Calculate mapping fraction.
+  awk ' { b[$1] ++ } END {OFS = ","; for (i in b) print i, b[i] } ' tmp1 > tmp2 
+  join <(sort -t $',' -k 1,1 contig_len) <(sort -t $',' -k 1,1 tmp2) -t $',' -j 1 | 
+  awk -F, 'BEGIN {OFS=","} $4=$3/$2 {print $1,$4} ' > tbl2
+
+  # Combine to one table, ad ID.
+  ID=${sample##*/}    
+  ID=${ID%_*}   
+  join <(sort -t $',' -k 1,1 tbl1) <(sort -t $',' -k 1,1 tbl2) -t $',' -j 1 | 
+  sort -t $',' -n -k 1,1 | awk -v SMPL=$ID 'BEGIN {OFS=","} {print SMPL, $0} ' >> $OUT 
+
+  rm cov_tmp.bam tmp1 tmp2 tbl1 tbl2
+
+done < <(find $INDIR/*.fa -type f)
+
+rm contig_len
+

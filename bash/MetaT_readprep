@@ -1,0 +1,124 @@
+#!/bin/bash
+# MetaT readprep
+# By Thomas Yssing Michaelsen
+VERSION=0.1.3
+
+### Description ----------------------------------------------------------------
+
+USAGE="$(basename "$0") [-h] [-d dir -i file -o dir -q value -t value] 
+-- MetaT readprep v. $VERSION: Prepare RNA reads for mapping, by performing adapter trimming, Q-score filtering, and rRNA removal of 50bp SR. 
+
+Arguments:
+    -h  Show this help text.
+    -d  Directory to search for raw Illumina SR sequencing data.
+    -i  List of prefixes for files to search for.
+    -o  Output directory to put QC'ed reads. Defaults to 'RNAreads' in cd.
+    -q  Q-score threshold. Default: 20.
+    -t  Number of threads. Defaults: 10.
+
+Output:
+ 1) .fasta files of curated reads in -o directory.
+ 2) A file 'seqstat.txt' containing count statistics of reads during each step. Dumped in '-o'.
+
+Note: 
+The -i option relies on the typical naming convention of demultiplexed Illumina output files, meaning that the prefix is consistent and unique for all files (read no., lane) for a particular sample. Make sure this is the case. The code will concatenate all files with same prefix before downstream processing.
+
+Requirements:
+- BBMap
+"
+### Terminal Arguments ---------------------------------------------------------
+
+# Import user arguments
+while getopts ':hz:d:i:o:q:t:' OPTION; do
+  case $OPTION in
+    h) echo "$USAGE"; exit 1;;
+    d) RAWDIR=$OPTARG;;
+    i) SAMPLES=$OPTARG;;
+    o) OUTDIR=$OPTARG;;
+    q) Qscore=$OPTARG;;
+    t) THREADS=$OPTARG;;
+    :) printf "missing argument for -$OPTARG\n" >&2; exit 1;;
+    \?) printf "invalid option for -$OPTARG\n" >&2; exit 1;;
+  esac
+done
+
+# Check missing arguments
+MISSING="is missing but required. Exiting."
+if [ ! -e $SAMPLES ]; then
+  printf "\n -i is not pointing to a valid file.\n\n"
+  echo "$USAGE"
+  exit 1
+fi
+if [ -z ${RAWDIR+x} ]; then echo "-d $MISSING"; exit 1; fi;
+if [ -z ${OUTDIR+x} ]; then OUTDIR=`echo $PWD`/RNAreads; fi;
+if [ -z ${Qscore+x} ]; then Qscore=20; fi;
+if [ -z ${THREADS+x} ]; then THREADS=10; fi;
+
+### Dependencies.--------------------------------------------------------------
+bb=/space/users/tym/Documents/bbmap
+
+### Code.----------------------------------------------------------------------
+ 
+echo -e "Searching for samples in:\n$RAWDIR"
+
+# Find, concatenate, and unzip.
+rm -rf tmp; mkdir tmp
+nfiles=$(wc -l < $SAMPLES)
+if [ $nfiles -gt $THREADS ]; then nfiles=$THREADS; fi;
+function FindCatUnzip {
+  sample=$1
+  DIR=$2
+  x=$(find $DIR -type f -name $sample'_'*.gz)
+
+  if [ ! -z "$x" ]; then cat $x | gzip -d > tmp/$sample.fq; fi
+}
+export -f FindCatUnzip
+parallel -j$nfiles FindCatUnzip ::: $(cat $SAMPLES) ::: $RAWDIR
+
+# Report number of found files.
+echo "Found $(ls tmp -1 | wc -l) of $(wc -l < $SAMPLES) samples"
+# Add missing names if needed.
+mis=$(sort $SAMPLES <(ls tmp | sed -e 's/\..*$//') | uniq -u | awk -vORS=, '{ print }' | sed 's/,$/\n/')
+if [ ! -z "$mis" ]; then echo "NOT FOUND: $mis"; fi
+
+### Process each file in turn.
+if [ ! -d "$OUTDIR" ]; then mkdir $OUTDIR; fi;
+echo -e "SeqID\tRaw\tafter_QC" > $OUTDIR/seqstat.txt
+
+count=1
+for sample in $( find tmp -type f -printf '%f\n' -name *.fq | sed -e 's/\..*$//'); do 
+  echo -ne "                                                            \r"
+  echo -ne "Processing $sample... ($count of $(wc -l < $SAMPLES))\r"; (( count++ )) 
+
+  # Count reads before QC.
+  raw=$(($(wc -l tmp/$sample.fq | awk '{ print $1 }') / 4))
+
+  # Adapter trimming and Q-score filtering.
+  $bb/bbduk.sh in=tmp/$sample.fq \
+    out=tmp/tmp.fa \
+    ref=$bb/resources/adapters.fa \
+    ktrim=r \
+    mink=11 \
+    qtrim=r \
+    trimq=$Qscore \
+    minlen=45 \
+    threads=$THREADS \
+    showspeed=f >/dev/null 2>/dev/null
+  
+  # Rename reads to running numbers.
+  awk -v SAMPLE=$sample '{print (NR%2 == 1) ? ">"SAMPLE"." ++i : $0}' tmp/tmp.fa > $OUTDIR/$sample.fa
+  rm tmp/tmp.fa
+   
+  # Count reads after QC.
+  QC=$(grep -c ">" $OUTDIR/$sample.fa)
+
+  # Dump stats.
+  echo -e "$sample\t$raw\t$QC" >> $OUTDIR/seqstat.txt
+
+done 
+
+# Remove excess files/folders.
+rm -rf tmp
+echo -ne '\n'
+echo "DONE, for real!"
+
